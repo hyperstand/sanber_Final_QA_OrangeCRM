@@ -113,3 +113,94 @@ describe('Dashboard Widgets', () => {
     })
   })
 })
+
+describe('Dashboard API (after login)', () => {
+  const baseUrl = 'https://opensource-demo.orangehrmlive.com/web/index.php/api/'
+
+  beforeEach(() => {
+    // UI login so Cypress has the cookies/session
+    LoginPom.visit()
+    LoginPom.login('Admin', 'admin123')
+    DashboardPom.assertOnDashboard()
+  })
+
+  it('Time at Work API (dynamic date/time)', () => {
+    const now = new Date()
+
+    // format YYYY-MM-DD
+    const currentDate = now.toISOString().split('T')[0]
+
+    // format HH:MM
+    const pad = (n) => n.toString().padStart(2, '0')
+    const currentTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`
+
+    cy.log(`Testing with date=${currentDate}, time=${currentTime}`)
+
+    cy.request(`${baseUrl}v2/dashboard/employees/time-at-work?timezoneOffset=7&currentDate=${currentDate}&currentTime=${currentTime}`)
+      .then((resp) => {
+        expect(resp.status).to.eq(200)
+        expect(resp.body).to.have.property('data')
+        expect(resp.body.meta).to.have.property('currentDay')
+      })
+  })
+
+  it('Action Summary API', () => {
+    cy.request(`${baseUrl}v2/dashboard/employees/action-summary`).then((resp) => {
+      expect(resp.status).to.eq(200)
+      expect(resp.body.data).to.be.an('array')
+    })
+  })
+
+it('Shortcuts API (Quick Launch widget)', () => {
+  cy.request(`${baseUrl}v2/dashboard/shortcuts`).then((resp) => {
+    expect(resp.status).to.eq(200)
+    expect(resp.body.data).to.be.an('object')
+
+    const shortcuts = resp.body.data
+    const keys = Object.keys(shortcuts)
+
+    // Check expected keys exist
+    expect(keys).to.include.members([
+      'leave.assign_leave',
+      'leave.leave_list',
+      'time.employee_timesheet',
+      'leave.apply_leave',
+      'leave.my_leave',
+      'time.my_timesheet'
+    ])
+
+    // Check values are booleans (true/false)
+    keys.forEach((key) => {
+      expect(shortcuts[key]).to.be.a('boolean')
+    })
+  })
+})
+
+
+it('Buzz Feed API', () => {
+  cy.request(`${baseUrl}v2/buzz/feed?limit=5&offset=0&sortOrder=DESC&sortField=share.createdAtUtc`)
+    .then((resp) => {
+      expect(resp.status).to.eq(200)
+      expect(resp.body.data).to.be.an('array')
+      expect(resp.body.meta.total).to.be.gte(0)
+
+      const posts = resp.body.data
+
+      // check first post
+      expect(posts[0]).to.have.property('id')
+      expect(posts[0]).to.have.property('text')
+      expect(posts[0].employee).to.have.property('firstName')
+      expect(posts[0].employee).to.have.property('lastName')
+      expect(posts[0].stats).to.have.property('numOfLikes')
+
+      // verify that at least one post contains "baby boy"
+      const hasBabyBoyPost = posts.some(p => p.text.includes('baby boy'))
+      expect(hasBabyBoyPost).to.be.true
+
+      // verify at least one post has type = "photo"
+      const hasPhotoPost = posts.some(p => p.type === 'photo')
+      expect(hasPhotoPost).to.be.true
+    })
+})
+
+})
